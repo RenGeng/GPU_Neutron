@@ -14,6 +14,14 @@
 #include <curand_kernel.h>
 
 #define OUTPUT_FILE "/tmp/absorbed.dat"
+
+
+#define NB_BLOCK 256
+#define NB_THREAD 256
+
+
+
+
 #define CUDA_CALL(x) do { if((x) != cudaSuccess) { \
     printf("Error at %s:%d\n",__FILE__,__LINE__); \
     return EXIT_FAILURE;}} while(0)
@@ -34,48 +42,17 @@ Exemple d'execution : \n\
     neutron-seq 1.0 500000000 0.5 0.5\n\
 ";
 
-/*
- * générateur uniforme de nombres aléatoires dans l'intervalle [0,1)
- */
-struct drand48_data alea_buffer;
-
-void init_uniform_random_number() {
-  srand48_r(0, &alea_buffer);
-}
-
-float uniform_random_number() {
-  double res = 0.0; 
-  drand48_r(&alea_buffer,&res);
-  return res;
-}
-
-
 __global__ void setup_kernel(curandState *state){
 
   int idx = threadIdx.x+blockDim.x*blockIdx.x;
-  curand_init(1234, idx, 0, &state[idx]);
+
+  // On initialise chaque générateur avec une graine différente
+  curand_init(idx, 0, 0, &state[idx]);
+
+  /*On initialise chaque générateur avec la même graine mais avec une séquence différente
+  Les générateur donneront pas les mêmes chiffres car chaque séquence est séparé de 2^67 nombres*/
+  // curand_init(666, idx, 0, &state[idx]);
 }
-
-__global__ void generate_kernel(curandState *my_curandstate){
-
-  int idx = threadIdx.x + blockDim.x*blockIdx.x;
-
-  // while (count < n){
-  float myrandf = curand_uniform(my_curandstate+idx);
-  printf("thread numéro %d : %lf\n",idx,myrandf);
-    // myrandf *= (max_rand_int[idx] - min_rand_int[idx]+0.999999);
-    // myrandf += min_rand_int[idx];
-    // int myrand = (int)truncf(myrandf);
-
-    // assert(myrand <= max_rand_int[idx]);
-    // assert(myrand >= min_rand_int[idx]);
-    // result[myrand-min_rand_int[idx]]++;
-    // count++;}
-}
-
-
-
-
 
 /*
  * notre gettimeofday()
@@ -87,47 +64,85 @@ double my_gettimeofday(){
 }
 
 
-__global__ void neutron_gpu()
+__global__ void neutron_gpu(curandState *state, float h, int n, float c_c, float c_s, float *result)
 {
-  float d,x;
+
+  // nombre de neutrons refléchis, absorbés et transmis
+  int r, b, t;
+  r = b = t = 0;
+
+  // Tableau pour l'écriture de chaque thread
+  __shared__ int R[NB_THREAD];
+  __shared__ int B[NB_THREAD];
+  __shared__ int T[NB_THREAD];
+
+
+  float c;
+  c = c_c + c_s;
+
+  // distance parcourue par le neutron avant la collision
+  float L;
+  // direction du neutron (0 <= d <= PI)
+  float d;
+  // variable aléatoire uniforme
+  float u;
+  // position de la particule (0 <= x <= h)
+  float x;
+
   int idx;
   idx = threadIdx.x + blockIdx.x * blockDim.x;
-  int nb_neutron = 1000;
+  int tmp = idx;
+  // On copie le générateur sur le registre pour plus d'efficacité
+  curandState localState = state[idx];
 
   /* code GPU */
-  // while(idx < n)
-  // {
+  while(idx < n)
+  {
+    d = 0.0;
+    x = 0.0;
 
-  //   idx+= blockDim.x * gridDim.x;
-  // }
+    while(1)
+    {
+      u = curand_uniform(&localState);
+      L = -(1 / c) * log(u);
+      x = x + L * cos(d);
+      if (x < 0)
+      {
+        r++;
+        break;
+      }
+      else if (x >= h)
+      {
+        t++;
+        break;
+      }
+      else if ((u = curand_uniform(&localState)) < c_c / c)
+      {
+        b++;
+        result[idx] = x;
+        break;
+      }
+      else
+      {
+        u = curand_uniform(&localState);
+        d = u * M_PI;
+      }
+    }
+
+    idx+= blockDim.x * gridDim.x;
+  }
+
+  // printf("%d,%d,%d,",r,b,t);
+  // printf("thread %d: r=%d,b=%d,t=%d\n",tmp,r,b,t);
 
 
-  /* code seq */
-  // for (int j = 0; j < nb_neutron; j++) {
-  //   d = 0.0;
-  //   x = 0.0;
+  R[threadIdx] = r;
+  B[threadIdx] = b;
+  T[threadIdx] = t;
 
-  //   while (1) {
+  // Synchronisation avant qu'un thread calcule la somme totale
+  __syncthreads();
 
-  //     u = uniform_random_number();
-  //     L = -(1 / c) * log(u);
-  //     x = x + L * cos(d);
-  //     if (x < 0) {
-  // r++;
-  // break;
-  //     } else if (x >= h) {
-  // t++;
-  // break;
-  //     } else if ((u = uniform_random_number()) < c_c / c) {
-  // b++;
-  // absorbed[j++] = x;
-  // break;
-  //     } else {
-  // u = uniform_random_number();
-  // d = u * M_PI;
-  //     }
-  //   }
-  // }
 }
 
 
@@ -139,33 +154,15 @@ int main(int argc, char *argv[]) {
 
   // La distance moyenne entre les interactions neutron/atome est 1/c. 
   // c_c et c_s sont les composantes absorbantes et diffusantes de c. 
-  float c, c_c, c_s;
+  float c_c, c_s;
   // épaisseur de la plaque
   float h;
-  // distance parcourue par le neutron avant la collision
-  float L;
-  // direction du neutron (0 <= d <= PI)
-  float d;
-  // variable aléatoire uniforme
-  float u;
   // position de la particule (0 <= x <= h)
   float x;
   // nombre d'échantillons
   int n;
-  // nombre de neutrons refléchis, absorbés et transmis
-  int r, b, t;
   // chronometrage
   double start, finish;
-  int i, j = 0; // compteurs 
-
-  curandState *d_state;
-  CUDA_CALL(cudaMalloc(&d_state, sizeof(curandState)));
-
-  // Allocation pour le générateur random de GPU
-
-  // On plante la graine
-  setup_kernel<<<512,512>>>(d_state);
-
 
   if( argc == 1)
     fprintf( stderr, "%s\n", info);
@@ -185,56 +182,39 @@ int main(int argc, char *argv[]) {
     c_c = atof(argv[3]);
   if (argc > 4)
     c_s = atof(argv[4]);
-  r = b = t = 0;
-  c = c_c + c_s;
 
   // affichage des parametres pour verificatrion
-  printf("Épaisseur de la plaque : %4.g\n", h);
-  printf("Nombre d'échantillons  : %d\n", n);
-  printf("C_c : %g\n", c_c);
-  printf("C_s : %g\n", c_s);
+  // printf("Épaisseur de la plaque : %4.g\n", h);
+  // printf("Nombre d'échantillons  : %d\n", n);
+  // printf("C_c : %g\n", c_c);
+  // printf("C_s : %g\n", c_s);
 
-  generate_kernel<<<512,512>>>(d_state);
+  float *device_absorbed, *host_absorbed;
+
+  //Allocation mémoire du résultat côté CPU
+  host_absorbed = (float *) calloc(n, sizeof(float));
+
+  //Allocation mémoire du résultat côté GPU
+  cudaMalloc((void **)&device_absorbed, n*sizeof(float));
+  cudaMemset(device_absorbed,0,n*sizeof(float));
+
+  // Allocation mémoire par le CPU du tableau de générateur pseudo-aléatoire
+  curandState *d_state;
+  CUDA_CALL(cudaMalloc((void **)&d_state, NB_BLOCK*NB_THREAD*sizeof(curandState)));
+
+  // generate_kernel<<<NB_BLOCK,NB_THREAD>>>(d_state);
 
 
+  // debut du chronometrage
+  start = my_gettimeofday();
+  
+  // On initialise les générateurs
+  setup_kernel<<<NB_BLOCK,NB_THREAD>>>(d_state);
 
+  neutron_gpu<<<NB_BLOCK,NB_THREAD>>>(d_state, h, n, c_c, c_s, device_absorbed);
 
-
- //  float *absorbed;
- //  absorbed = (float *) calloc(n, sizeof(float));
-
- //  // debut du chronometrage
- //  start = my_gettimeofday();
-    
- //  init_uniform_random_number();
- //  for (i = 0; i < n; i++) {
- //    d = 0.0;
- //    x = 0.0;
-
- //    while (1) {
-
- //      u = uniform_random_number();
- //      L = -(1 / c) * log(u);
- //      x = x + L * cos(d);
- //      if (x < 0) {
-	// r++;
-	// break;
- //      } else if (x >= h) {
-	// t++;
-	// break;
- //      } else if ((u = uniform_random_number()) < c_c / c) {
-	// b++;
-	// absorbed[j++] = x;
-	// break;
- //      } else {
-	// u = uniform_random_number();
-	// d = u * M_PI;
- //      }
- //    }
- //  }
-
-  // // fin du chronometrage
-  // finish = my_gettimeofday();
+  // fin du chronometrage
+  finish = my_gettimeofday();
 
   // printf("\nPourcentage des neutrons refléchis : %4.2g\n", (float) r / (float) n);
   // printf("Pourcentage des neutrons absorbés : %4.2g\n", (float) b / (float) n);
