@@ -1,13 +1,13 @@
-SRCS = neutron2.cu
+SRCS = neutron-seq.c
 EXE_NAME = neutron-seq
 
-CC = nvcc
-CFLAGS = -O3 # -std=c11
+CC = gcc
+CFLAGS = -Wall -O3 # -std=c11
 LIBS = -lm
 
 all: ${EXE_NAME}
 
-% : %.cu
+% : %.c
 	$(CC) $(CFLAGS) $< -o $@ $(OBJECTS) $(LIBS)
 
 clean:

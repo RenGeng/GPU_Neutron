@@ -1,7 +1,7 @@
 /*
- * Université Pierre et Marie Curie
+ * UniversitÃ© Pierre et Marie Curie
  * Calcul de transport de neutrons
- * Version séquentielle
+ * Version sÃ©quentielle
  */
 
 #include <stdlib.h>
@@ -16,8 +16,8 @@ char info[] = "\
 Usage:\n\
     neutron-seq H Nb C_c C_s\n\
 \n\
-    H  : épaisseur de la plaque\n\
-    Nb : nombre d'échantillons\n\
+    H  : Ã©paisseur de la plaque\n\
+    Nb : nombre d'Ã©chantillons\n\
     C_c: composante absorbante\n\
     C_s: componente diffusante\n\
 \n\
@@ -26,7 +26,7 @@ Exemple d'execution : \n\
 ";
 
 /*
- * générateur uniforme de nombres aléatoires dans l'intervalle [0,1)
+ * gÃ©nÃ©rateur uniforme de nombres alÃ©atoires dans l'intervalle [0,1)
  */
 struct drand48_data alea_buffer;
 
@@ -37,7 +37,6 @@ void init_uniform_random_number() {
 float uniform_random_number() {
   double res = 0.0; 
   drand48_r(&alea_buffer,&res);
-  // printf("res = %lf\n",res);
   return res;
 }
 
@@ -57,19 +56,19 @@ int main(int argc, char *argv[]) {
   // La distance moyenne entre les interactions neutron/atome est 1/c. 
   // c_c et c_s sont les composantes absorbantes et diffusantes de c. 
   float c, c_c, c_s;
-  // épaisseur de la plaque
+  // Ã©paisseur de la plaque
   float h;
   // distance parcourue par le neutron avant la collision
   float L;
   // direction du neutron (0 <= d <= PI)
   float d;
-  // variable aléatoire uniforme
+  // variable alÃ©atoire uniforme
   float u;
   // position de la particule (0 <= x <= h)
   float x;
-  // nombre d'échantillons
+  // nombre d'Ã©chantillons
   int n;
-  // nombre de neutrons refléchis, absorbés et transmis
+  // nombre de neutrons reflÃ©chis, absorbÃ©s et transmis
   int r, b, t;
   // chronometrage
   double start, finish;
@@ -97,8 +96,8 @@ int main(int argc, char *argv[]) {
   c = c_c + c_s;
 
   // affichage des parametres pour verificatrion
-  printf("Épaisseur de la plaque : %4.g\n", h);
-  printf("Nombre d'échantillons  : %d\n", n);
+  printf("Ã‰paisseur de la plaque : %4.g\n", h);
+  printf("Nombre d'Ã©chantillons  : %d\n", n);
   printf("C_c : %g\n", c_c);
   printf("C_s : %g\n", c_s);
 
@@ -120,18 +119,18 @@ int main(int argc, char *argv[]) {
       L = -(1 / c) * log(u);
       x = x + L * cos(d);
       if (x < 0) {
-	r++;
-	break;
+  r++;
+  break;
       } else if (x >= h) {
-	t++;
-	break;
+  t++;
+  break;
       } else if ((u = uniform_random_number()) < c_c / c) {
-	b++;
-	absorbed[j++] = x;
-	break;
+  b++;
+  absorbed[j++] = x;
+  break;
       } else {
-	u = uniform_random_number();
-	d = u * M_PI;
+  u = uniform_random_number();
+  d = u * M_PI;
       }
     }
   }
@@ -139,29 +138,30 @@ int main(int argc, char *argv[]) {
   // fin du chronometrage
   finish = my_gettimeofday();
 
-  printf("\nPourcentage des neutrons refléchis : %4.2g\n", (float) r / (float) n);
-  printf("Pourcentage des neutrons absorbés : %4.2g\n", (float) b / (float) n);
+  printf("r=%d, b=%d, t=%d\n",r,b,t);
+
+  printf("\nPourcentage des neutrons reflÃ©chis : %4.2g\n", (float) r / (float) n);
+  printf("Pourcentage des neutrons absorbÃ©s : %4.2g\n", (float) b / (float) n);
   printf("Pourcentage des neutrons transmis : %4.2g\n", (float) t / (float) n);
 
   printf("\nTemps total de calcul: %.8g sec\n", finish - start);
   printf("Millions de neutrons /s: %.2g\n", (double) n / ((finish - start)*1e6));
 
-  // ouverture du fichier pour ecrire les positions des neutrons absorbés
-  FILE *f_handle = fopen(OUTPUT_FILE, "w");
-  if (!f_handle) {
-    fprintf(stderr, "Cannot open " OUTPUT_FILE "\n");
-    exit(EXIT_FAILURE);
-  }
+  // // ouverture du fichier pour ecrire les positions des neutrons absorbÃ©s
+  // FILE *f_handle = fopen(OUTPUT_FILE, "w");
+  // if (!f_handle) {
+  //   fprintf(stderr, "Cannot open " OUTPUT_FILE "\n");
+  //   exit(EXIT_FAILURE);
+  // }
 
-  for (j = 0; j < b; j++)
-    fprintf(f_handle, "%f\n", absorbed[j]);
+  // for (j = 0; j < b; j++)
+  //   fprintf(f_handle, "%f\n", absorbed[j]);
 
-  // fermeture du fichier
-  fclose(f_handle);
-  printf("Result written in " OUTPUT_FILE "\n"); 
+  // // fermeture du fichier
+  // fclose(f_handle);
+  // printf("Result written in " OUTPUT_FILE "\n"); 
 
   free(absorbed);
 
   return EXIT_SUCCESS;
 }
-

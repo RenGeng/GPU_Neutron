@@ -27,6 +27,10 @@
     return EXIT_FAILURE;}} while(0)
 
 
+// Déclaration dans le mémoire RAM du GPU
+__device__ int device_r;
+__device__ int device_b;
+__device__ int device_t;
 
 
 char info[] = "\
@@ -91,7 +95,6 @@ __global__ void neutron_gpu(curandState *state, float h, int n, float c_c, float
 
   int idx;
   idx = threadIdx.x + blockIdx.x * blockDim.x;
-  int tmp = idx;
   // On copie le générateur sur le registre pour plus d'efficacité
   curandState localState = state[idx];
 
@@ -132,20 +135,36 @@ __global__ void neutron_gpu(curandState *state, float h, int n, float c_c, float
     idx+= blockDim.x * gridDim.x;
   }
 
-  // printf("%d,%d,%d,",r,b,t);
-  // printf("thread %d: r=%d,b=%d,t=%d\n",tmp,r,b,t);
 
-
-  R[threadIdx] = r;
-  B[threadIdx] = b;
-  T[threadIdx] = t;
+  // On stock r,b,t dans le tableau
+  R[threadIdx.x] = r;
+  B[threadIdx.x] = b;
+  T[threadIdx.x] = t;
 
   // Synchronisation avant qu'un thread calcule la somme totale
   __syncthreads();
 
+  // Reduction des tableaux
+  for(unsigned int s = blockDim.x/2; s > 0; s = s/2)
+  {
+    if(threadIdx.x < s)
+    {
+      R[threadIdx.x] += R[threadIdx.x + s];
+      B[threadIdx.x] += B[threadIdx.x + s];
+      T[threadIdx.x] += T[threadIdx.x + s];
+    }
+    __syncthreads();
+  }
+
+
+  // Seul le thread 0 d'une bloc va additionner l'ensemble des valeurs
+  if(threadIdx.x == 0)
+  {
+    atomicAdd(&device_r,R[0]);
+    atomicAdd(&device_b,B[0]);
+    atomicAdd(&device_t,T[0]);
+  }
 }
-
-
 
 /*
  * main()
@@ -157,8 +176,6 @@ int main(int argc, char *argv[]) {
   float c_c, c_s;
   // épaisseur de la plaque
   float h;
-  // position de la particule (0 <= x <= h)
-  float x;
   // nombre d'échantillons
   int n;
   // chronometrage
@@ -184,26 +201,25 @@ int main(int argc, char *argv[]) {
     c_s = atof(argv[4]);
 
   // affichage des parametres pour verificatrion
-  // printf("Épaisseur de la plaque : %4.g\n", h);
-  // printf("Nombre d'échantillons  : %d\n", n);
-  // printf("C_c : %g\n", c_c);
-  // printf("C_s : %g\n", c_s);
-
-  float *device_absorbed, *host_absorbed;
+  printf("Épaisseur de la plaque : %4.g\n", h);
+  printf("Nombre d'échantillons  : %d\n", n);
+  printf("C_c : %g\n", c_c);
+  printf("C_s : %g\n", c_s);
 
   //Allocation mémoire du résultat côté CPU
+  float *host_absorbed;
   host_absorbed = (float *) calloc(n, sizeof(float));
 
+  int r,b,t;
+
   //Allocation mémoire du résultat côté GPU
+  float *device_absorbed;
   cudaMalloc((void **)&device_absorbed, n*sizeof(float));
   cudaMemset(device_absorbed,0,n*sizeof(float));
 
   // Allocation mémoire par le CPU du tableau de générateur pseudo-aléatoire
   curandState *d_state;
   CUDA_CALL(cudaMalloc((void **)&d_state, NB_BLOCK*NB_THREAD*sizeof(curandState)));
-
-  // generate_kernel<<<NB_BLOCK,NB_THREAD>>>(d_state);
-
 
   // debut du chronometrage
   start = my_gettimeofday();
@@ -213,15 +229,22 @@ int main(int argc, char *argv[]) {
 
   neutron_gpu<<<NB_BLOCK,NB_THREAD>>>(d_state, h, n, c_c, c_s, device_absorbed);
 
+  cudaMemcpy(host_absorbed,device_absorbed,n*sizeof(float),cudaMemcpyDeviceToHost);
+
+  cudaMemcpyFromSymbol(&r, device_r, sizeof(int),0);  
+  cudaMemcpyFromSymbol(&b, device_b, sizeof(int),0); 
+  cudaMemcpyFromSymbol(&t, device_t, sizeof(int),0); 
+
   // fin du chronometrage
   finish = my_gettimeofday();
 
-  // printf("\nPourcentage des neutrons refléchis : %4.2g\n", (float) r / (float) n);
-  // printf("Pourcentage des neutrons absorbés : %4.2g\n", (float) b / (float) n);
-  // printf("Pourcentage des neutrons transmis : %4.2g\n", (float) t / (float) n);
+  printf("r=%d, b=%d, t=%d\n",r,b,t);
+  printf("\nPourcentage des neutrons refléchis : %4.2g\n", (float) r / (float) n);
+  printf("Pourcentage des neutrons absorbés : %4.2g\n", (float) b / (float) n);
+  printf("Pourcentage des neutrons transmis : %4.2g\n", (float) t / (float) n);
 
-  // printf("\nTemps total de calcul: %.8g sec\n", finish - start);
-  // printf("Millions de neutrons /s: %.2g\n", (double) n / ((finish - start)*1e6));
+  printf("\nTemps total de calcul: %.8g sec\n", finish - start);
+  printf("Millions de neutrons /s: %.2g\n", (double) n / ((finish - start)*1e6));
 
   // // ouverture du fichier pour ecrire les positions des neutrons absorbés
   // FILE *f_handle = fopen(OUTPUT_FILE, "w");
@@ -230,15 +253,16 @@ int main(int argc, char *argv[]) {
   //   exit(EXIT_FAILURE);
   // }
 
-  // for (j = 0; j < b; j++)
-  //   fprintf(f_handle, "%f\n", absorbed[j]);
+  // for (int j = 0; j < n; j++)
+  //   if(host_absorbed[j]!=0.0) fprintf(f_handle, "%f\n", host_absorbed[j]);
 
   // // fermeture du fichier
   // fclose(f_handle);
   // printf("Result written in " OUTPUT_FILE "\n"); 
 
-  // free(absorbed);
   cudaFree(d_state);
+  cudaFree(device_absorbed);
+  free(host_absorbed);
 
   return EXIT_SUCCESS;
 }
