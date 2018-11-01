@@ -179,8 +179,10 @@ int main(int argc, char *argv[]) {
   // nombre d'échantillons
   int n;
   // chronometrage
-  double start, finish;
-
+  // double start, finish;
+  cudaEvent_t start, finish;
+  cudaEventCreate(&start);
+  cudaEventCreate(&finish);
   if( argc == 1)
     fprintf( stderr, "%s\n", info);
 
@@ -222,8 +224,10 @@ int main(int argc, char *argv[]) {
   CUDA_CALL(cudaMalloc((void **)&d_state, NB_BLOCK*NB_THREAD*sizeof(curandState)));
 
   // debut du chronometrage
-  start = my_gettimeofday();
-  
+  // start = my_gettimeofday();
+  cudaEventRecord(start, 0);
+
+
   // On initialise les générateurs
   setup_kernel<<<NB_BLOCK,NB_THREAD>>>(d_state);
 
@@ -236,15 +240,19 @@ int main(int argc, char *argv[]) {
   cudaMemcpyFromSymbol(&t, device_t, sizeof(int),0); 
 
   // fin du chronometrage
-  finish = my_gettimeofday();
+  // finish = my_gettimeofday();
+  cudaEventRecord(finish, 0);
+  cudaEventSynchronize(finish);
+  float elapsedTime;
+  cudaEventElapsedTime(&elapsedTime, start, finish);
 
   printf("r=%d, b=%d, t=%d\n",r,b,t);
   printf("\nPourcentage des neutrons refléchis : %4.2g\n", (float) r / (float) n);
   printf("Pourcentage des neutrons absorbés : %4.2g\n", (float) b / (float) n);
   printf("Pourcentage des neutrons transmis : %4.2g\n", (float) t / (float) n);
 
-  printf("\nTemps total de calcul: %.8g sec\n", finish - start);
-  printf("Millions de neutrons /s: %.2g\n", (double) n / ((finish - start)*1e6));
+  printf("\nTemps total de calcul: %.8g sec\n", elapsedTime);
+  printf("Millions de neutrons /s: %.2g\n", (double) n / ((elapsedTime)*1e6));
 
   // // ouverture du fichier pour ecrire les positions des neutrons absorbés
   // FILE *f_handle = fopen(OUTPUT_FILE, "w");
