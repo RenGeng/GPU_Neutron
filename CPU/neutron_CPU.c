@@ -38,6 +38,7 @@ void init_uniform_random_number() {
 float uniform_random_number() {
   double res = 0.0; 
   drand48_r(&alea_buffer,&res);
+  // printf("THREAD NUM %d a comme valeur %lf\n",omp_get_thread_num(),res);
   return res;
 }
 
@@ -128,7 +129,10 @@ int main(int argc, char *argv[]) {
 	break;
       } else if ((u = uniform_random_number()) < c_c / c) {
 	b++;
-	absorbed[j++] = x;
+  #pragma omp atomic update
+  j++;
+	absorbed[j] = x;
+  // printf("THREAD %d a j=%d\n",omp_get_thread_num(),j);
 	break;
       } else {
 	u = uniform_random_number();
