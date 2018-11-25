@@ -1,14 +1,11 @@
-SRCS = neutron-seq.c
-EXE_NAME = neutron-seq
-
-CC = gcc
-CFLAGS = -Wall -O3 # -std=c11
-LIBS = -lm
-
-all: ${EXE_NAME}
-
-% : %.c
-	$(CC) $(CFLAGS) $< -o $@ $(OBJECTS) $(LIBS)
+all:
+	$(MAKE) -C Sequentiel/
+	$(MAKE) -C GPU/
+	$(MAKE) -C CPU/
+	$(MAKE) -C CPU_GPU/
 
 clean:
-	rm -f ${EXE_NAME} *.o *~
+	$(MAKE) clean -C Sequentiel/
+	$(MAKE) clean -C GPU/
+	$(MAKE) clean -C CPU/
+	$(MAKE) clean -C CPU_GPU/
