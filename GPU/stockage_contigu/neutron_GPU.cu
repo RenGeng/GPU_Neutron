@@ -31,7 +31,7 @@
 __device__ int device_r;
 __device__ int device_b;
 __device__ int device_t;
-
+__device__ int j=0;
 
 char info[] = "\
 Usage:\n\
@@ -74,7 +74,7 @@ __global__ void neutron_gpu(curandState *state, float h, int n, float c_c, float
   // nombre de neutrons refléchis, absorbés et transmis
   int r, b, t;
   r = b = t = 0;
-
+  int j_loc;
   // Tableau pour l'écriture de chaque thread
   __shared__ int R[NB_THREAD];
   __shared__ int B[NB_THREAD];
@@ -122,7 +122,8 @@ __global__ void neutron_gpu(curandState *state, float h, int n, float c_c, float
       else if ((u = curand_uniform(&localState)) < c_c / c)
       {
         b++;
-        result[idx] = x;
+        j_loc = atomicAdd(&j,1);
+        result[j_loc] = x;
         break;
       }
       else
@@ -182,6 +183,7 @@ int main(int argc, char *argv[]) {
   cudaEvent_t start, finish;
   cudaEventCreate(&start);
   cudaEventCreate(&finish);
+
   if( argc == 1)
     fprintf( stderr, "%s\n", info);
 
@@ -258,9 +260,8 @@ int main(int argc, char *argv[]) {
     exit(EXIT_FAILURE);
   }
 
-  for (int j = 0; j < n; j++)
-    if(host_absorbed[j]!=0.0) fprintf(f_handle, "%f\n", host_absorbed[j]);
-    else break;
+  for (int j = 0; j < b; j++)
+    fprintf(f_handle, "%f\n", host_absorbed[j]);
 
   // fermeture du fichier
   fclose(f_handle);
