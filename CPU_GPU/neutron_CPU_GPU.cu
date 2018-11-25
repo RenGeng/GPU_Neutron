@@ -1,7 +1,7 @@
 /*
  * Université Pierre et Marie Curie
  * Calcul de transport de neutrons
- * Version séquentielle
+ * Version CPU+GPU
  */
 
 #include <stdlib.h>
@@ -58,8 +58,6 @@ float uniform_random_number() {
   drand48_r(&alea_buffer,&res);
   return res;
 }
-
-
 
 
 __global__ void setup_kernel(curandState *state){
@@ -208,10 +206,7 @@ int main(int argc, char *argv[]) {
   int rh, bh, th;
   // chronometrage
   double start, finish;
-  int i, j = 0; // compteurs 
-
-
-
+  int j = 0; // compteurs 
 
   if( argc == 1)
     fprintf( stderr, "%s\n", info);
@@ -232,6 +227,13 @@ int main(int argc, char *argv[]) {
   if (argc > 4)
     c_s = atof(argv[4]);
 
+  // Le GPU récupère la plus part du travail
+  int taille_gpu = n - ceil(n/30);
+  // Le reste est pour le CPU
+  int taille_cpu = n - taille_gpu;
+
+  printf("taill gpu: %d et taille_cpu : %d",taille_gpu,taille_cpu);
+
   // affichage des parametres pour verificatrion
   printf("Épaisseur de la plaque : %4.g\n", h);
   printf("Nombre d'échantillons  : %d\n", n);
@@ -241,10 +243,11 @@ int main(int argc, char *argv[]) {
   //Allocation mémoire du résultat côté CPU
   float *host_absorbed;
   host_absorbed = (float *) calloc(n, sizeof(float));
+
     //Allocation mémoire du résultat côté GPU
   float *device_absorbed;
-  cudaMalloc((void **)&device_absorbed, n/30*29*sizeof(float));
-  cudaMemset(device_absorbed,0,n/30*29*sizeof(float));
+  cudaMalloc((void **)&device_absorbed, taille_gpu*sizeof(float));
+  cudaMemset(device_absorbed,0,taille_gpu*sizeof(float));
 
   // Allocation mémoire par le CPU du tableau de générateur pseudo-aléatoire
   curandState *d_state;
@@ -252,57 +255,63 @@ int main(int argc, char *argv[]) {
 
   // debut du chronometrage
   start = my_gettimeofday();
-   printf("JESUISLA1\n"); 
-  #pragma omp parallel
-  if(omp_get_thread_num()==0){
 
-  // On initialise les générateurs
-  setup_kernel<<<NB_BLOCK,NB_THREAD>>>(d_state);
+  #pragma omp parallel num_threads(4)
+  {
+    if(omp_get_thread_num()==0)
+    {
+      printf("dans le if\n");
+    // On initialise les générateurs
+    setup_kernel<<<NB_BLOCK,NB_THREAD>>>(d_state);
 
-  neutron_gpu<<<NB_BLOCK,NB_THREAD>>>(d_state, h, n/30*29, c_c, c_s, device_absorbed);
+    neutron_gpu<<<NB_BLOCK,NB_THREAD>>>(d_state, h, taille_gpu, c_c, c_s, device_absorbed);
 
-  cudaMemcpy(host_absorbed+n/30,device_absorbed,n/30*sizeof(float),cudaMemcpyDeviceToHost);
+    cudaMemcpy(host_absorbed+taille_cpu,device_absorbed,taille_gpu*sizeof(float),cudaMemcpyDeviceToHost);
 
-  cudaMemcpyFromSymbol(&rh, device_r, sizeof(int),0);  
-  cudaMemcpyFromSymbol(&bh, device_b, sizeof(int),0); 
-  cudaMemcpyFromSymbol(&th, device_t, sizeof(int),0); 
+    cudaMemcpyFromSymbol(&rh, device_r, sizeof(int),0);  
+    cudaMemcpyFromSymbol(&bh, device_b, sizeof(int),0); 
+    cudaMemcpyFromSymbol(&th, device_t, sizeof(int),0); 
 
-  }
-
-  else{
-printf("JESUISLA2\n");
-  #pragma omp for reduction(+:r,b,t) private(u,L,x,d)
-  for (i = 0; i < n/30; i++) {
-    d = 0.0;
-    x = 0.0;
-
-    while (1){
-      
-      u = uniform_random_number();
-      L = -(1 / c) * log(u);
-      x = x + L * cos(d);
-      if (x < 0) {
-	r++;
-	break;
-      } else if (x >= h) {
-	t++;
-	break;
-      } else if ((u = uniform_random_number()) < c_c / c) {
-	b++;
-	host_absorbed[j++] = x;
-	break;
-      } else {
-	u = uniform_random_number();
-	d = u * M_PI;
+    }
+    else
+    {
+      init_uniform_random_number();
+      #pragma omp for reduction(+:r,b,t) private(u,L,x,d)
+      for (int i = 0; i < taille_cpu; i++) {
+        d = 0.0;
+        x = 0.0;
+        printf("thread %d dans le else r = %d, b = %d, t = %d\n",omp_get_thread_num(),r,b,t);
+        while (1){
+          
+          u = uniform_random_number();
+          L = -(1 / c) * log(u);
+          x = x + L * cos(d);
+          if (x < 0) {
+    	r++;
+    	break;
+          } else if (x >= h) {
+    	t++;
+    	break;
+          } else if ((u = uniform_random_number()) < c_c / c) {
+    	b++;
+      #pragma omp atomic update
+      j++;
+    	host_absorbed[j] = x;
+    	break;
+          } else {
+    	u = uniform_random_number();
+    	d = u * M_PI;
+          }
+        }
       }
     }
-  }
+    #pragma omp barrier
 }
   r = r + rh;
   b = b + bh;
   t = t + th;
 
-
+  printf("fin\n");
   // fin du chronometrage
   finish = my_gettimeofday();
 
@@ -315,19 +324,19 @@ printf("JESUISLA2\n");
   printf("\nTemps total de calcul: %.8g sec\n", finish - start);
   printf("Millions de neutrons /s: %.2g\n", (double) n / ((finish - start)*1e6));
 
-  // // ouverture du fichier pour ecrire les positions des neutrons absorbés
-  // FILE *f_handle = fopen(OUTPUT_FILE, "w");
-  // if (!f_handle) {
-  //   fprintf(stderr, "Cannot open " OUTPUT_FILE "\n");
-  //   exit(EXIT_FAILURE);
-  // }
+  // ouverture du fichier pour ecrire les positions des neutrons absorbés
+  FILE *f_handle = fopen(OUTPUT_FILE, "w");
+  if (!f_handle) {
+    fprintf(stderr, "Cannot open " OUTPUT_FILE "\n");
+    exit(EXIT_FAILURE);
+  }
 
-  // for (int j = 0; j < n; j++)
-  //   if(host_absorbed[j]!=0.0) fprintf(f_handle, "%f\n", host_absorbed[j]);
+  for (int j = 0; j < n; j++)
+    if(host_absorbed[j]!=0.0) fprintf(f_handle, "%f\n", host_absorbed[j]);
 
-  // // fermeture du fichier
-  // fclose(f_handle);
-  // printf("Result written in " OUTPUT_FILE "\n"); 
+  // fermeture du fichier
+  fclose(f_handle);
+  printf("Result written in " OUTPUT_FILE "\n"); 
 
   cudaFree(d_state);
   cudaFree(device_absorbed);

@@ -1,7 +1,7 @@
 SRCS = neutron_CPU_GPU.cu
 
 CC = nvcc
-CFLAGS = -O3 -Xcompiler -fopenmp # -std=c11
+CFLAGS = -O3 -Xcompiler -fopenmp -lgomp # -std=c11
 LIBS = -lm
 
 all : neutron_CPU_GPU
