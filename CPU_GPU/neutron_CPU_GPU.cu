@@ -19,7 +19,7 @@
 
 #define NB_BLOCK 256
 #define NB_THREAD 256
-
+#define CHARGE_GPU 0.75
 
 
 
@@ -233,7 +233,7 @@ int main(int argc, char *argv[]) {
 
 
   // Le GPU récupère la plus part du travail
-  int taille_gpu = n - ceil(n/30);
+  int taille_gpu = ceil(CHARGE_GPU * n);
   // Le reste est pour le CPU
   int taille_cpu = n - taille_gpu;
 
