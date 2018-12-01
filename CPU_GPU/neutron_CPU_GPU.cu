@@ -14,7 +14,7 @@
 #include <curand_kernel.h>
 #include <omp.h>
 
-#define OUTPUT_FILE "/tmp/absorbed.dat"
+#define OUTPUT_FILE "absorbed.dat"
 
 
 #define NB_BLOCK 256
@@ -256,11 +256,10 @@ int main(int argc, char *argv[]) {
   // debut du chronometrage
   start = my_gettimeofday();
 
-  #pragma omp parallel num_threads(4)
+  #pragma omp parallel reduction(+:r,b,t) private(u,L,x,d) num_threads(4)
   {
     if(omp_get_thread_num()==0)
     {
-      printf("dans le if\n");
     // On initialise les générateurs
     setup_kernel<<<NB_BLOCK,NB_THREAD>>>(d_state);
 
@@ -276,11 +275,13 @@ int main(int argc, char *argv[]) {
     else
     {
       init_uniform_random_number();
-      #pragma omp for reduction(+:r,b,t) private(u,L,x,d)
+      // #pragma omp for// reduction(+:r,b,t) private(u,L,x,d)
+
+      // Faire partir chaque i avec le numéro de thread for(i = num_thread; i< taille_cpu/nb_thread; i++) un truc comme ça
       for (int i = 0; i < taille_cpu; i++) {
         d = 0.0;
         x = 0.0;
-        printf("thread %d dans le else r = %d, b = %d, t = %d\n",omp_get_thread_num(),r,b,t);
+        printf("thread %d dans le else i = %d;\n",omp_get_thread_num(),i);
         while (1){
           
           u = uniform_random_number();
@@ -310,8 +311,6 @@ int main(int argc, char *argv[]) {
   r = r + rh;
   b = b + bh;
   t = t + th;
-
-  printf("fin\n");
   // fin du chronometrage
   finish = my_gettimeofday();
 
@@ -331,8 +330,8 @@ int main(int argc, char *argv[]) {
     exit(EXIT_FAILURE);
   }
 
-  for (int j = 0; j < n; j++)
-    if(host_absorbed[j]!=0.0) fprintf(f_handle, "%f\n", host_absorbed[j]);
+  for (int j = 0; j < b; j++)
+    fprintf(f_handle, "%f\n", host_absorbed[j]);
 
   // fermeture du fichier
   fclose(f_handle);
