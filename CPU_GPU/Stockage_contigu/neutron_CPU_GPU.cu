@@ -89,6 +89,7 @@ __global__ void neutron_gpu(curandState *state, float h, int n, float c_c, float
   // nombre de neutrons refléchis, absorbés et transmis
   int r, b, t;
   r = b = t = 0;
+  int j_loc;
   // Tableau pour l'écriture de chaque thread
   __shared__ int R[NB_THREAD];
   __shared__ int B[NB_THREAD];
@@ -136,7 +137,9 @@ __global__ void neutron_gpu(curandState *state, float h, int n, float c_c, float
       else if ((u = curand_uniform(&localState)) < c_c / c)
       {
         b++;
-        result[idx] = x;
+        j_loc = atomicAdd(&device_j,1);
+        result[j_loc] = x;
+        // result[idx] = x;
         break;
       }
       else
@@ -300,6 +303,7 @@ int main(int argc, char *argv[]) {
     	break;
           } else if ((u = uniform_random_number()) < c_c / c) {
     	b++;
+      #pragma omp atomic update
       j++;
     	host_absorbed[j] = x;
     	break;
