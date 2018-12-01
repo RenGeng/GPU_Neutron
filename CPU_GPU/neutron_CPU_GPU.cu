@@ -256,9 +256,10 @@ int main(int argc, char *argv[]) {
   // debut du chronometrage
   start = my_gettimeofday();
 
-  #pragma omp parallel reduction(+:r,b,t) private(u,L,x,d) num_threads(4)
+  #pragma omp parallel num_threads(2)
   {
-    if(omp_get_thread_num()==0)
+    // un seul thread appel le kernel
+    #pragma omp master
     {
     // On initialise les générateurs
     setup_kernel<<<NB_BLOCK,NB_THREAD>>>(d_state);
@@ -272,16 +273,15 @@ int main(int argc, char *argv[]) {
     cudaMemcpyFromSymbol(&th, device_t, sizeof(int),0); 
 
     }
-    else
+    // tous les autres threads calculent les neutrons
     {
       init_uniform_random_number();
-      // #pragma omp for// reduction(+:r,b,t) private(u,L,x,d)
-
       // Faire partir chaque i avec le numéro de thread for(i = num_thread; i< taille_cpu/nb_thread; i++) un truc comme ça
+      #pragma omp for nowait reduction(+:r,b,t) private(u,L,x,d)
       for (int i = 0; i < taille_cpu; i++) {
         d = 0.0;
         x = 0.0;
-        printf("thread %d dans le else i = %d;\n",omp_get_thread_num(),i);
+        // printf("thread %d dans le else i = %d;\n",omp_get_thread_num(),i);
         while (1){
           
           u = uniform_random_number();
@@ -306,6 +306,7 @@ int main(int argc, char *argv[]) {
         }
       }
     }
+    // On s'assure que tous les threads ont terminé leurs tâches
     #pragma omp barrier
 }
   r = r + rh;
@@ -314,8 +315,8 @@ int main(int argc, char *argv[]) {
   // fin du chronometrage
   finish = my_gettimeofday();
 
-
-  printf("r=%d, b=%d, t=%d\n",r,b,t);
+  printf("rh=%d, bh=%d, th=%d\n",rh,bh,th);
+  printf("r=%d, b=%d, t=%d, nb total neutron traités = %d\n",r,b,t,r+b+t);
   printf("\nPourcentage des neutrons refléchis : %4.2g\n", (float) r / (float) n);
   printf("Pourcentage des neutrons absorbés : %4.2g\n", (float) b / (float) n);
   printf("Pourcentage des neutrons transmis : %4.2g\n", (float) t / (float) n);
