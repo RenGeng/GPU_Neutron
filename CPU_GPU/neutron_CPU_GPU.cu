@@ -256,7 +256,7 @@ int main(int argc, char *argv[]) {
   // debut du chronometrage
   start = my_gettimeofday();
 
-  #pragma omp parallel num_threads(2)
+  #pragma omp parallel num_threads(4)
   {
     // un seul thread appel le kernel
     #pragma omp master
@@ -277,7 +277,7 @@ int main(int argc, char *argv[]) {
     {
       init_uniform_random_number();
       // Faire partir chaque i avec le numéro de thread for(i = num_thread; i< taille_cpu/nb_thread; i++) un truc comme ça
-      #pragma omp for nowait reduction(+:r,b,t) private(u,L,x,d)
+      #pragma omp for reduction(+:r,b,t) private(u,L,x,d)
       for (int i = 0; i < taille_cpu; i++) {
         d = 0.0;
         x = 0.0;
