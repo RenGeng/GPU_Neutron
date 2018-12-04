@@ -110,6 +110,7 @@ int main(int argc, char *argv[]) {
   // debut du chronometrage
   start = my_gettimeofday();
   #pragma omp parallel reduction(+:r,b,t) private(u,L,x,d,alea_buffer)
+  {
   init_uniform_random_number();
   #pragma omp for
   for (i = 0; i < n; i++) {
@@ -138,6 +139,7 @@ int main(int argc, char *argv[]) {
       }
     }
   }
+}
 
   // fin du chronometrage
   finish = my_gettimeofday();
