@@ -109,9 +109,9 @@ int main(int argc, char *argv[]) {
 
   // debut du chronometrage
   start = my_gettimeofday();
-  #pragma omp parallel
+  #pragma omp parallel reduction(+:r,b,t) private(u,L,x,d,alea_buffer)
   init_uniform_random_number();
-  #pragma omp parallel for reduction(+:r,b,t) private(u,L,x,d)
+  #pragma omp for
   for (i = 0; i < n; i++) {
     d = 0.0;
     x = 0.0;
