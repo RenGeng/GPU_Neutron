@@ -289,7 +289,6 @@ int main(int argc, char *argv[]) {
       for (i = 0; i < taille_cpu; i++) {
         d = 0.0;
         x = 0.0;
-        // printf("thread %d dans le else i = %d;\n",omp_get_thread_num(),i);
         while (1){
           
           u = uniform_random_number();
@@ -314,13 +313,8 @@ int main(int argc, char *argv[]) {
         }
       }
     }
-    // On s'assure que tous les threads ont terminé leurs tâches
-    // #pragma omp barrier
 }
 
-
-  // printf("rh=%d, bh=%d, th=%d\n",rh,bh,th);
-  // printf("r=%d, b=%d, t=%d, nb total neutron traités = %d\n",r,b,t,r+b+t);
   r = r + rh;
   b = b + bh;
   t = t + th;

@@ -281,12 +281,10 @@ int main(int argc, char *argv[]) {
     // tous les autres threads calculent les neutrons
     {
       init_uniform_random_number();
-      // Faire partir chaque i avec le numéro de thread for(i = num_thread; i< taille_cpu/nb_thread; i++) un truc comme ça
       #pragma omp for reduction(+:r,b,t) private(u,L,x,d)
       for (i = 0; i < taille_cpu; i++) {
         d = 0.0;
         x = 0.0;
-        // printf("thread %d dans le else i = %d;\n",omp_get_thread_num(),i);
         while (1){
           
           u = uniform_random_number();
@@ -310,16 +308,12 @@ int main(int argc, char *argv[]) {
         }
       }
     }
-    // On s'assure que tous les threads ont terminé leurs tâches
-    // #pragma omp barrier
 }
 
-
-  // printf("rh=%d, bh=%d, th=%d\n",rh,bh,th);
-  // printf("r=%d, b=%d, t=%d, nb total neutron traités = %d\n",r,b,t,r+b+t);
   r = r + rh;
   b = b + bh;
   t = t + th;
+
   // fin du chronometrage
   finish = my_gettimeofday();
 

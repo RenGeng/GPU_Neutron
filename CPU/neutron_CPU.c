@@ -38,7 +38,6 @@ void init_uniform_random_number() {
 float uniform_random_number() {
   double res = 0.0; 
   drand48_r(&alea_buffer,&res);
-  // printf("THREAD NUM %d a comme valeur %lf\n",omp_get_thread_num(),res);
   return res;
 }
 
@@ -109,9 +108,10 @@ int main(int argc, char *argv[]) {
 
   // debut du chronometrage
   start = my_gettimeofday();
-    
+  #pragma omp parallel reduction(+:r,b,t) private(u,L,x,d,alea_buffer) num_threads(4)
+  {
   init_uniform_random_number();
-  #pragma omp parallel for reduction(+:r,b,t) private(u,L,x,d)
+  #pragma omp for
   for (i = 0; i < n; i++) {
     d = 0.0;
     x = 0.0;
@@ -122,24 +122,22 @@ int main(int argc, char *argv[]) {
       L = -(1 / c) * log(u);
       x = x + L * cos(d);
       if (x < 0) {
-	r++;
-	break;
+  r++;
+  break;
       } else if (x >= h) {
-	t++;
-	break;
+  t++;
+  break;
       } else if ((u = uniform_random_number()) < c_c / c) {
-	b++;
-  #pragma omp atomic update
-  j++;
-	absorbed[j] = x;
-  // printf("THREAD %d a j=%d\n",omp_get_thread_num(),j);
-	break;
+  b++;
+  absorbed[j++] = x;
+  break;
       } else {
-	u = uniform_random_number();
-	d = u * M_PI;
+  u = uniform_random_number();
+  d = u * M_PI;
       }
     }
   }
+}
 
   // fin du chronometrage
   finish = my_gettimeofday();
@@ -169,4 +167,3 @@ int main(int argc, char *argv[]) {
 
   return EXIT_SUCCESS;
 }
-
