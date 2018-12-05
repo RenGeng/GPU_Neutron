@@ -55,7 +55,7 @@ __global__ void setup_kernel(curandState *state){
 
   /*On initialise chaque générateur avec la même graine mais avec une séquence différente
   Les générateur donneront pas les mêmes chiffres car chaque séquence est séparé de 2^67 nombres*/
-  // curand_init(666, idx, 0, &state[idx]);
+  // curand_init(1, idx, 0, &state[idx]);
 }
 
 /*

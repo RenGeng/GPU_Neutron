@@ -258,9 +258,8 @@ int main(int argc, char *argv[]) {
     exit(EXIT_FAILURE);
   }
 
-  for (int j = 0; j < n; j++)
-    if(host_absorbed[j]!=0.0) fprintf(f_handle, "%f\n", host_absorbed[j]);
-    else break;
+  for (int j = 0; j < b; j++)
+    fprintf(f_handle, "%f\n", host_absorbed[j]);
 
   // fermeture du fichier
   fclose(f_handle);

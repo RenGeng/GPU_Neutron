@@ -233,17 +233,17 @@ int main(int argc, char *argv[]) {
 
 
   // Le GPU récupère la plus part du travail
-  int taille_gpu = ceil(CHARGE_GPU * n);
+  int taille_gpu = n - ceil(n/1000);
   // Le reste est pour le CPU
   int taille_cpu = n - taille_gpu;
-
-  printf("taill gpu: %d et taille_cpu : %d",taille_gpu,taille_cpu);
 
   // affichage des parametres pour verificatrion
   printf("Épaisseur de la plaque : %4.g\n", h);
   printf("Nombre d'échantillons  : %d\n", n);
   printf("C_c : %g\n", c_c);
   printf("C_s : %g\n", c_s);
+
+  printf("Nombre de neutron pour GPU : %d\nNombre de neutron pour CPU : %d",taille_gpu,taille_cpu);
 
   //Allocation mémoire du résultat côté CPU
   float *host_absorbed;

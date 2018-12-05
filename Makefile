@@ -11,4 +11,5 @@ clean:
 	$(MAKE) clean -C GPU/
 	$(MAKE) clean -C GPU/stockage_contigu
 	$(MAKE) clean -C CPU/
+	$(MAKE) clean -C CPU_GPU/
 	$(MAKE) clean -C CPU_GPU/Stockage_contigu
